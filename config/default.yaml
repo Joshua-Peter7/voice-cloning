@@ -1,0 +1,136 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Indic Voice Cloner — Default Configuration
+# Override any value via environment variables: IVC_<SECTION>__<KEY>=value
+# e.g., IVC_ASR__MODEL=distil-large-v3
+# ─────────────────────────────────────────────────────────────────────────────
+
+app:
+  name: "indic-voice-cloner"
+  version: "1.0.0"
+  env: "production"          # production | staging | development
+  log_level: "INFO"          # DEBUG | INFO | WARNING | ERROR
+
+# ── South Indian Language Focus ──────────────────────────────────────────────
+languages:
+  primary:
+    - ta   # Tamil
+    - te   # Telugu
+    - kn   # Kannada
+    - ml   # Malayalam
+  extended:
+    - hi   # Hindi
+    - bn   # Bengali
+    - mr   # Marathi
+    - gu   # Gujarati
+    - pa   # Punjabi
+    - en   # English
+
+# ── VAD (Voice Activity Detection) ──────────────────────────────────────────
+vad:
+  model: "silero"            # silero | webrtc (fallback)
+  threshold: 0.50            # Speech probability threshold (0.0–1.0)
+  min_silence_ms: 300        # Silence duration to end utterance
+  speech_pad_ms: 30          # Padding around detected speech
+  sample_rate: 16000         # Fixed — Silero requires 16kHz
+  chunk_samples: 512         # Fixed — Silero minimum chunk at 16kHz
+  onnx_mode: true            # Use ONNX for faster CPU inference
+
+# ── ASR (Automatic Speech Recognition) ──────────────────────────────────────
+asr:
+  model: "large-v3"          # large-v3 | distil-large-v3 | medium
+  compute_type: "float16"    # float16 (GPU) | int8 (CPU/faster)
+  device: "auto"             # auto | cuda | cpu
+  beam_size: 1               # 1 = greedy (fastest); higher = accurate
+  vad_filter: false          # VAD handled upstream
+  word_timestamps: true
+  condition_on_previous: false
+  download_root: "models/whisper"
+  # South Indian language hints for better accuracy
+  language_hints:
+    ta: ["tamil"]
+    te: ["telugu"]
+    kn: ["kannada"]
+    ml: ["malayalam"]
+
+# ── TTS (Text-to-Speech / Voice Cloning) ────────────────────────────────────
+tts:
+  backend: "parler"          # parler | xtts | auto (parler for Indic, xtts for clone)
+  stream_chunk_words: 5      # Buffer this many words before synthesizing
+  sample_rate: 24000
+  # sentence-ending characters that trigger early flush
+  sentence_ends: [".", "!", "?", "।", "؟", "።", "｡"]
+
+  parler:
+    model_id: "ai4bharat/indic-parler-tts"
+    dtype: "float16"         # float16 | float32
+    device: "auto"
+    # Per-language voice descriptions (modifiable)
+    voice_descriptions:
+      ta: "A clear, natural Tamil female voice with neutral Chennai accent."
+      te: "A clear, natural Telugu male voice with neutral Hyderabad accent."
+      kn: "A clear, natural Kannada female voice with neutral Bangalore accent."
+      ml: "A clear, natural Malayalam male voice with neutral Kerala accent."
+      hi: "A clear, natural Hindi voice with neutral accent."
+      en: "A clear, natural English voice with Indian accent."
+      default: "A clear, natural, neutral voice."
+
+  xtts:
+    model_id: "tts_models/multilingual/multi-dataset/xtts_v2"
+    device: "auto"
+    reference_min_seconds: 6
+    reference_max_seconds: 30
+    split_sentences: false    # managed externally for streaming
+
+# ── SLM (Small Language Model) ───────────────────────────────────────────────
+slm:
+  model_id: "microsoft/Phi-3.5-mini-instruct"
+  quantization: "awq"        # awq | gptq | bitsandbytes | none
+  max_tokens: 256
+  temperature: 0.7
+  tensor_parallel: 1
+  gpu_memory_utilization: 0.85
+  speculative:
+    enabled: false
+    draft_model: "microsoft/phi-1_5"
+    num_tokens: 5
+  awq_save_path: "models/phi-3.5-mini-awq"
+  awq_quant_config:
+    zero_point: true
+    q_group_size: 128
+    w_bit: 4
+    version: "GEMM"
+
+# ── Session Management ────────────────────────────────────────────────────────
+session:
+  backend: "redis"           # redis | memory
+  ttl_seconds: 1800          # 30 minutes
+  max_history_turns: 6
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    socket_timeout: 2
+    key_prefix: "ivc:session:"
+
+# ── API Server ────────────────────────────────────────────────────────────────
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1                 # 1 for GPU (avoid model duplication)
+  cors_origins: ["*"]
+  max_ws_connections: 100
+  audio_format: "wav"        # wav | opus
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+monitoring:
+  prometheus_port: 9090
+  enable_gpu_metrics: true
+  gpu_poll_interval_s: 5
+  sla_ttfb_ms: 1000          # SLA threshold for TTFB alerts
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+infra:
+  region: "ap-south-1"       # AWS Mumbai | GCP asia-south1
+  model_cache_dir: "models"
+  audio_samples_dir: "audio_samples"
+  log_dir: "logs"

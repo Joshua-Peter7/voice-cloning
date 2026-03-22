@@ -1,0 +1,116 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Indic Voice Cloner — Docker Compose (Local Dev + Staging)
+# Usage: docker compose up --build
+# GPU required for latency targets. CPU mode works but is slow.
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+
+  # ── Main voice API ──────────────────────────────────────────────────────────
+  indic-voice-cloner:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: indic-voice-cloner:latest
+    container_name: ivc-api
+    ports:
+      - "8000:8000"   # FastAPI
+      - "9090:9090"   # Prometheus metrics
+    environment:
+      - IVC_APP__ENV=production
+      - IVC_APP__LOG_LEVEL=INFO
+      - IVC_SESSION__BACKEND=redis
+      - IVC_SESSION__REDIS__HOST=redis
+      - IVC_SESSION__REDIS__PORT=6379
+      - IVC_ASR__DEVICE=auto
+      - IVC_TTS__BACKEND=parler
+    volumes:
+      - ../../models:/app/models
+      - ../../audio_samples:/app/audio_samples
+      - ../../logs:/app/logs
+      - ../../config:/app/config
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ivc-network
+
+  # ── Redis session store ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ivc-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ivc-network
+
+  # ── Prometheus metrics ──────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ivc-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ../../config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+    networks:
+      - ivc-network
+
+  # ── Grafana dashboards ──────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ivc-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=indicvoice123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/ivc.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../../config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../../config/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - ivc-network
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  ivc-network:
+    driver: bridge

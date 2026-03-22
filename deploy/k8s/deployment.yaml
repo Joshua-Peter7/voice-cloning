@@ -1,0 +1,255 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Indic Voice Cloner — Kubernetes Manifests
+# GPU Node Pool: NVIDIA L4 (AWS g6.xlarge / GCP n1 + L4)
+# Region:        ap-south-1 (Mumbai) — <50ms RTT to South Indian users
+#
+# Deploy:  kubectl apply -f deploy/k8s/
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: voice-ai
+  labels:
+    app.kubernetes.io/part-of: indic-voice-cloner
+
+---
+# ── ConfigMap ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ivc-config
+  namespace: voice-ai
+data:
+  IVC_APP__ENV: "production"
+  IVC_APP__LOG_LEVEL: "INFO"
+  IVC_SESSION__BACKEND: "redis"
+  IVC_ASR__MODEL: "large-v3"
+  IVC_TTS__BACKEND: "parler"
+  IVC_API__PORT: "8000"
+
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indic-voice-cloner
+  namespace: voice-ai
+  labels:
+    app: indic-voice-cloner
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: indic-voice-cloner
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime rolling deploy
+  template:
+    metadata:
+      labels:
+        app: indic-voice-cloner
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      # Target GPU node pool
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4   # GKE
+        # node.kubernetes.io/instance-type: g6.xlarge # EKS alternative
+
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+
+      # Graceful shutdown — allow in-flight WebSocket turns to complete
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: indic-voice-cloner
+          image: your-registry/indic-voice-cloner:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: 9090
+
+          envFrom:
+            - configMapRef:
+                name: ivc-config
+          env:
+            - name: IVC_SESSION__REDIS__HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ivc-redis-secret
+                  key: host
+            - name: IVC_SESSION__REDIS__PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ivc-redis-secret
+                  key: port
+            - name: CUDA_VISIBLE_DEVICES
+              value: "0"
+            - name: VLLM_WORKER_MULTIPROC_METHOD
+              value: "spawn"
+
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "32Gi"
+              nvidia.com/gpu: "1"
+
+          # Liveness: restart if the process is hung
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            failureThreshold: 3
+
+          # Readiness: only route traffic when models are loaded
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 5
+
+          volumeMounts:
+            - name: model-cache
+              mountPath: /app/models
+            - name: audio-samples
+              mountPath: /app/audio_samples
+
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: ivc-model-cache-pvc
+        - name: audio-samples
+          persistentVolumeClaim:
+            claimName: ivc-audio-samples-pvc
+
+---
+# ── Persistent Volume Claims ──────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ivc-model-cache-pvc
+  namespace: voice-ai
+spec:
+  accessModes: [ReadOnlyMany]
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: premium-rwo    # Use fast SSD storage class
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ivc-audio-samples-pvc
+  namespace: voice-ai
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: indic-voice-cloner-svc
+  namespace: voice-ai
+  annotations:
+    # AWS: provision an NLB for WebSocket support
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: indic-voice-cloner
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 8000
+      protocol: TCP
+  sessionAffinity: ClientIP        # Pin WebSocket sessions to same pod
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 1800
+
+---
+# ── HorizontalPodAutoscaler ───────────────────────────────────────────────────
+# Scales on: TTFB p95 > 800ms (custom metric) OR CPU > 70%
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ivc-hpa
+  namespace: voice-ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: indic-voice-cloner
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: ivc_ttfb_ms_p95   # Requires Prometheus Adapter
+        target:
+          type: AverageValue
+          averageValue: "800m"    # 800ms — fire scale-up before SLA breach
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300   # Hold 5 min before scale-down
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+
+---
+# ── PodDisruptionBudget ───────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ivc-pdb
+  namespace: voice-ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: indic-voice-cloner

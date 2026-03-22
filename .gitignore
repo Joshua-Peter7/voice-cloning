@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env
+
+# Logs
+logs/
+*.log
+
+# Models and downloaded ML assets (Warning: large files)
+models/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# Dynamically generated audio
+audio_samples/
+output.wav
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db

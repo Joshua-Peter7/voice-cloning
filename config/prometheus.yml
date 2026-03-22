@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    region: ap-south-1
+    service: indic-voice-cloner
+
+scrape_configs:
+  - job_name: indic-voice-cloner
+    static_configs:
+      - targets: ["indic-voice-cloner:9090"]
+    metrics_path: /metrics
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis:6379"]
