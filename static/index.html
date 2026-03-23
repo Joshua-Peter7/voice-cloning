@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Indic Voice Cloner Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --primary: #7c3aed;
+            --primary-light: #a78bfa;
+            --accent: #06b6d4;
+            --bg: #0a0f1e;
+            --surface: #111827;
+            --surface2: #1f2937;
+            --border: rgba(255,255,255,0.08);
+            --text: #f1f5f9;
+            --muted: #6b7280;
+            --green: #10b981;
+            --red: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* NAV */
+        nav {
+            background: rgba(10,15,30,0.95);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            backdrop-filter: blur(12px);
+            position: sticky; top: 0; z-index: 100;
+        }
+        .nav-brand {
+            font-weight: 700;
+            font-size: 1.1rem;
+            background: linear-gradient(135deg, #a78bfa, #06b6d4);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-right: auto;
+        }
+        nav a {
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        nav a:hover, nav a.active {
+            background: rgba(124,58,237,0.15);
+            color: var(--primary-light);
+        }
+
+        /* LAYOUT */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem;
+        }
+
+        @media (max-width: 800px) {
+            main { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+        }
+        .panel:first-child { border-radius: 20px 0 0 20px; border-right: none; }
+        .panel:last-child { border-radius: 0 20px 20px 0; }
+
+        @media (max-width: 800px) {
+            .panel:first-child { border-radius: 20px 20px 0 0; border-right: 1px solid var(--border); border-bottom: none; }
+            .panel:last-child { border-radius: 0 0 20px 20px; }
+        }
+
+        h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+        h2 span { font-size: 0.75rem; color: var(--muted); background: var(--surface2); padding: 2px 10px; border-radius: 20px; font-weight: 400; }
+
+        label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+
+        .form-row { margin-bottom: 1.4rem; }
+
+        select, textarea {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        select:focus, textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+        }
+        textarea { resize: vertical; min-height: 130px; line-height: 1.6; }
+
+        /* UPLOAD ZONE */
+        .upload-zone {
+            border: 2px dashed rgba(124,58,237,0.3);
+            border-radius: 12px;
+            background: rgba(124,58,237,0.04);
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--primary);
+            background: rgba(124,58,237,0.08);
+        }
+        .upload-zone input[type="file"] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .upload-text { font-size: 0.9rem; color: var(--muted); }
+        .upload-text strong { color: var(--primary-light); }
+
+        /* FILE PREVIEW */
+        .file-preview {
+            display: none;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .file-preview.visible { display: flex; }
+        .file-icon { font-size: 1.5rem; }
+        .file-info { flex: 1; overflow: hidden; }
+        .file-info .file-name { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-info .file-meta { font-size: 0.75rem; color: var(--muted); }
+        .preview-audio { width: 100%; margin-top: 0.75rem; }
+        .remove-file { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1.2rem; padding: 0; flex-shrink: 0; }
+        .remove-file:hover { color: var(--red); }
+
+        /* MODE TOGGLE */
+        .mode-toggle { display: flex; gap: 0.5rem; background: var(--surface2); padding: 4px; border-radius: 10px; margin-bottom: 1.4rem; }
+        .mode-btn {
+            flex: 1; padding: 0.6rem; border: none; border-radius: 7px; cursor: pointer;
+            font-size: 0.85rem; font-weight: 600; font-family: inherit;
+            background: transparent; color: var(--muted); transition: all 0.2s;
+        }
+        .mode-btn.active { background: var(--primary); color: white; box-shadow: 0 2px 8px rgba(124,58,237,0.4); }
+
+        /* SUBMIT BUTTON */
+        .btn-generate {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary), #6d28d9);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.6rem;
+            box-shadow: 0 4px 15px rgba(124,58,237,0.3);
+        }
+        .btn-generate:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,58,237,0.4); }
+        .btn-generate:active { transform: translateY(0); }
+        .btn-generate:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* SPINNER */
+        .spinner {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* OUTPUT PANEL */
+        .output-placeholder {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; min-height: 250px; color: var(--muted); text-align: center; gap: 1rem;
+        }
+        .output-placeholder .big-icon { font-size: 4rem; opacity: 0.3; }
+
+        .result-card {
+            display: none;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+        .result-card.visible { display: flex; }
+
+        .waveform-bar-container {
+            background: var(--surface2);
+            border-radius: 10px;
+            height: 80px;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+            gap: 2px;
+            padding: 0 1rem;
+        }
+        .waveform-bar {
+            flex: 1; max-width: 4px;
+            background: var(--primary);
+            border-radius: 2px;
+            animation: wave 1.2s ease-in-out infinite;
+            opacity: 0.6;
+        }
+        .waveform-bar:nth-child(2n) { animation-delay: 0.1s; background: var(--accent); }
+        .waveform-bar:nth-child(3n) { animation-delay: 0.2s; }
+        @keyframes wave {
+            0%, 100% { height: 20%; }
+            50% { height: 80%; }
+        }
+        .waveform-bar.paused { animation-play-state: paused; height: 30% !important; }
+
+        .result-meta { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+        .meta-chip {
+            font-size: 0.75rem; padding: 3px 10px;
+            background: var(--surface2); border-radius: 20px; color: var(--muted);
+        }
+        .meta-chip.green { color: var(--green); background: rgba(16,185,129,0.1); }
+
+        .transcribed-text {
+            font-size: 0.95rem; line-height: 1.7; color: #94a3b8;
+            background: var(--surface2); border-radius: 10px; padding: 1rem;
+            max-height: 150px; overflow-y: auto;
+        }
+
+        .download-btn {
+            background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3);
+            color: var(--green); border-radius: 10px; padding: 0.6rem 1.2rem;
+            font-size: 0.85rem; font-weight: 600; font-family: inherit;
+            cursor: pointer; transition: all 0.2s; text-decoration: none;
+        }
+        .download-btn:hover { background: rgba(16,185,129,0.2); }
+
+        audio { width: 100%; border-radius: 8px; margin-top: -0.2rem; }
+
+        /* ERROR */
+        .error-bar {
+            display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5; border-radius: 10px; padding: 0.8rem 1rem; font-size: 0.9rem; margin-top: 1rem;
+        }
+        .error-bar.visible { display: block; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-brand">🎙 Indic Voice Studio</div>
+    <a href="/ui/" class="active">Voice Clone</a>
+    <a href="/ui/realtime.html">Real-Time</a>
+    <a href="/docs" target="_blank">API Docs</a>
+</nav>
+
+<main>
+    <!-- LEFT: INPUTS -->
+    <div class="panel">
+        <h2>Inputs <span>Configure voice & text</span></h2>
+
+        <!-- MODE -->
+        <div class="form-row">
+            <label>Mode</label>
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="btn-tts" onclick="setMode('tts')">📢 Standard TTS</button>
+                <button class="mode-btn" id="btn-clone" onclick="setMode('clone')">🔬 Voice Clone</button>
+            </div>
+        </div>
+
+        <!-- UPLOAD (hidden in TTS mode) -->
+        <div class="form-row" id="upload-section" style="display:none">
+            <label>Reference Audio <small style="font-weight:400; text-transform:none; letter-spacing:0">(6–30 seconds of clear speech)</small></label>
+            <div class="upload-zone" id="dropzone">
+                <input type="file" id="ref-audio-input" accept="audio/wav,audio/mp3,audio/*" onchange="handleFileSelect(event)">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Drop a <strong>.wav</strong> file here or <strong>click to browse</strong></div>
+            </div>
+            <div class="file-preview" id="file-preview">
+                <div class="file-icon">🎵</div>
+                <div class="file-info">
+                    <div class="file-name" id="file-name-text"></div>
+                    <div class="file-meta" id="file-meta-text"></div>
+                </div>
+                <button class="remove-file" onclick="removeFile()">✕</button>
+            </div>
+            <audio id="ref-audio-player" class="preview-audio" controls style="display:none; margin-top:0.75rem; width:100%;"></audio>
+        </div>
+
+        <!-- LANGUAGE -->
+        <div class="form-row">
+            <label>Output Language</label>
+            <select id="language">
+                <option value="en">🇬🇧 English</option>
+                <option value="ta">Tamil (தமிழ்)</option>
+                <option value="te">Telugu (తెలుగు)</option>
+                <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                <option value="ml">Malayalam (മലയാളം)</option>
+                <option value="hi">Hindi (हिंदी)</option>
+            </select>
+        </div>
+
+        <!-- EMOTION -->
+        <div class="form-row">
+            <label>Voice Emotion <small style="font-weight:400; text-transform:none; letter-spacing:0">(used by supported backends)</small></label>
+            <select id="emotion">
+                <option value="neutral">😐 Neutral</option>
+                <option value="happy">😊 Happy</option>
+                <option value="sad">😢 Sad</option>
+                <option value="angry">😠 Angry</option>
+                <option value="clear">🔊 Clear (intelligibility focus)</option>
+            </select>
+        </div>
+
+        <!-- AI MODE -->
+        <div class="form-row">
+            <label>AI Processing</label>
+            <select id="ai-mode">
+                <option value="direct">Direct — Speak my exact text</option>
+                <option value="slm">Conversational — Ask the AI (SLM)</option>
+            </select>
+        </div>
+
+        <!-- TEXT -->
+        <div class="form-row">
+            <label id="text-label">Text to Speak</label>
+            <textarea id="text-input" placeholder="Type the text you want synthesized in the cloned voice..."></textarea>
+        </div>
+
+        <button class="btn-generate" id="generate-btn" onclick="generate()">
+            <span id="btn-icon">✨</span>
+            <span id="btn-label">Generate Audio</span>
+            <div class="spinner" id="spinner"></div>
+        </button>
+
+        <div class="error-bar" id="error-bar"></div>
+    </div>
+
+    <!-- RIGHT: OUTPUT -->
+    <div class="panel">
+        <h2>Output <span>Generated audio</span></h2>
+
+        <div class="output-placeholder" id="output-placeholder">
+            <div class="big-icon">🔊</div>
+            <div>Configure inputs and click<br><strong>Generate Audio</strong> to begin</div>
+        </div>
+
+        <div class="result-card" id="result-card">
+            <div class="waveform-bar-container" id="waveform">
+                <!-- JS fills bars -->
+            </div>
+            <audio id="output-player" controls onplay="wavePlaying()" onpause="wavePaused()" onended="wavePaused()"></audio>
+            <div class="result-meta" id="result-meta"></div>
+            <div>
+                <label>Synthesized Text</label>
+                <div class="transcribed-text" id="result-text"></div>
+            </div>
+            <div style="display:flex; gap:0.8rem">
+                <a class="download-btn" id="download-btn" download="cloned_voice.wav">⬇ Download WAV</a>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    let currentMode = 'tts';
+    let selectedFileB64 = null;
+    let selectedFileName = null;
+    let selectedFileType = null;
+    let waveInterval = null;
+    let generationStart = 0;
+
+    // Build waveform bars
+    const waveform = document.getElementById('waveform');
+    for (let i = 0; i < 48; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'waveform-bar paused';
+        bar.style.animationDelay = `${(i * 23) % 1200}ms`;
+        bar.style.animationDuration = `${0.8 + (i % 7) * 0.1}s`;
+        waveform.appendChild(bar);
+    }
+
+    function wavePlaying() {
+        document.querySelectorAll('.waveform-bar').forEach(b => b.classList.remove('paused'));
+    }
+    function wavePaused() {
+        document.querySelectorAll('.waveform-bar').forEach(b => b.classList.add('paused'));
+    }
+
+    function setMode(m) {
+        currentMode = m;
+        document.getElementById('btn-tts').classList.toggle('active', m === 'tts');
+        document.getElementById('btn-clone').classList.toggle('active', m === 'clone');
+        document.getElementById('upload-section').style.display = m === 'clone' ? 'block' : 'none';
+        document.getElementById('text-label').textContent = m === 'clone' ? 'Text to Clone' : 'Text to Speak';
+        document.getElementById('text-input').placeholder = m === 'clone'
+            ? 'Enter the text you want spoken in the cloned voice...'
+            : 'Enter the text to synthesize with the AI voice...';
+    }
+
+    function handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        loadFile(file);
+    }
+
+    function loadFile(file) {
+        selectedFileName = file.name || null;
+        selectedFileType = file.type || null;
+        document.getElementById('file-name-text').textContent = file.name;
+        document.getElementById('file-meta-text').textContent = `${(file.size / 1024).toFixed(1)} KB · ${file.type || 'audio'}`;
+
+        const url = URL.createObjectURL(file);
+        const player = document.getElementById('ref-audio-player');
+        player.src = url;
+        player.style.display = 'block';
+        document.getElementById('file-preview').classList.add('visible');
+
+        // Read as base64
+        const reader = new FileReader();
+        reader.onload = () => {
+            selectedFileB64 = reader.result.split(',')[1];
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function removeFile() {
+        selectedFileB64 = null;
+        selectedFileName = null;
+        selectedFileType = null;
+        document.getElementById('ref-audio-input').value = '';
+        document.getElementById('ref-audio-player').style.display = 'none';
+        document.getElementById('file-preview').classList.remove('visible');
+    }
+
+    // Drag-and-drop
+    const dropzone = document.getElementById('dropzone');
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) loadFile(file);
+    });
+
+    async function generate() {
+        const text = document.getElementById('text-input').value.trim();
+        if (!text) { showError('Please enter some text to synthesize!'); return; }
+        if (text.includes('py main.py') || text.includes('--reference') || text.includes('--lang')) {
+            showError('Enter only the sentence to speak. Do not paste terminal command arguments here.');
+            return;
+        }
+        if (currentMode === 'clone' && !selectedFileB64) { showError('Please upload a reference voice file!'); return; }
+
+        setLoading(true);
+        clearError();
+        hideResult();
+        generationStart = performance.now();
+
+        const language = document.getElementById('language').value;
+        const aiMode = document.getElementById('ai-mode').value;
+        const emotion = document.getElementById('emotion').value;
+        const skipSlm = aiMode === 'direct';
+
+        try {
+            let endpoint, payload;
+            if (currentMode === 'clone') {
+                endpoint = '/clone';
+                payload = {
+                    reference_wav_b64: selectedFileB64,
+                    reference_filename: selectedFileName,
+                    reference_content_type: selectedFileType,
+                    text,
+                    language,
+                    skip_slm: skipSlm,
+                    emotion
+                };
+            } else {
+                endpoint = '/tts';
+                payload = {
+                    text,
+                    language,
+                    skip_slm: skipSlm,
+                    emotion
+                };
+            }
+
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+                throw new Error(err.detail || 'Server error');
+            }
+
+            const data = await res.json();
+            const elapsed = ((performance.now() - generationStart) / 1000).toFixed(2);
+            const audioSrc = 'data:audio/wav;base64,' + data.audio_base64;
+
+            showResult(audioSrc, text, elapsed, language, currentMode, emotion);
+
+        } catch (err) {
+            const msg = (err && err.message) ? err.message : String(err);
+            const low = msg.toLowerCase();
+            if (low.includes('failed to fetch') || low.includes('networkerror')) {
+                showError('Cannot reach API server. Run "py main.py serve" and open http://localhost:8000/ui/');
+            } else {
+                showError(msg);
+            }
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function showResult(audioSrc, text, elapsed, language, mode, emotion) {
+        const player = document.getElementById('output-player');
+        player.src = audioSrc;
+
+        document.getElementById('result-text').textContent = text;
+        document.getElementById('result-meta').innerHTML = `
+            <span class="meta-chip green">✓ ${elapsed}s</span>
+            <span class="meta-chip">${language.toUpperCase()}</span>
+            <span class="meta-chip">${mode === 'clone' ? '🔬 Cloned' : '📢 TTS'}</span>
+            <span class="meta-chip">${mode === 'clone' ? '🎵 F5 Clone' : '🎵 Auto TTS'}</span>
+            <span class="meta-chip">${emotion}</span>
+        `;
+        document.getElementById('download-btn').href = audioSrc;
+        document.getElementById('output-placeholder').style.display = 'none';
+        document.getElementById('result-card').classList.add('visible');
+    }
+
+    function hideResult() {
+        document.getElementById('result-card').classList.remove('visible');
+        document.getElementById('output-placeholder').style.display = 'flex';
+    }
+
+    function setLoading(loading) {
+        const btn = document.getElementById('generate-btn');
+        const icon = document.getElementById('btn-icon');
+        const label = document.getElementById('btn-label');
+        const spinner = document.getElementById('spinner');
+        btn.disabled = loading;
+        icon.style.display = loading ? 'none' : 'inline';
+        spinner.style.display = loading ? 'block' : 'none';
+        label.textContent = loading ? 'Generating...' : 'Generate Audio';
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('error-bar');
+        el.textContent = '⚠ ' + msg;
+        el.classList.add('visible');
+    }
+    function clearError() {
+        document.getElementById('error-bar').classList.remove('visible');
+    }
+</script>
+
+</body>
+</html>

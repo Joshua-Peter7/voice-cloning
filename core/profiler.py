@@ -9,14 +9,9 @@ from __future__ import annotations
 
 import random
 import statistics
-import time
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from core.interfaces import LatencyProfile
-from core.logger import get_logger
-
-log = get_logger("core.profiler")
 
 # South Indian language test phrases
 SOUTH_INDIC_TEST_PHRASES = [

@@ -7,23 +7,18 @@ Run with:  pytest tests/ -v
 
 from __future__ import annotations
 
-import asyncio
 import numpy as np
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import AsyncGenerator, Dict, List, Optional
+from unittest.mock import MagicMock
 
 from core.interfaces import (
-    ASRResult, BaseASR, BaseSLM, BaseSessionStore,
-    BaseVAD, LatencyProfile, SLMToken, TTSChunk, VADResult,
+    ASRResult, BaseASR, BaseSLM, BaseVAD, SLMToken, TTSChunk, VADResult,
 )
 from core.pipeline import PipelineOrchestrator
-from core.profiler import PipelineProfiler, simulate_benchmark
-from config.settings import Settings, load_settings
+from core.profiler import simulate_benchmark
+from config.settings import load_settings
 from session.manager import InMemorySessionStore
 from monitoring.metrics import NullMonitor
-from tts.engine import StreamingTTSEngine
-from config.settings import TTSConfig
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -74,7 +69,16 @@ def mock_slm():
 @pytest.fixture
 def mock_tts():
     class MockTTSEngine:
-        async def stream_from_tokens(self, token_gen, language, reference_wav=None, voice_description=None):
+        async def stream_from_tokens(
+            self,
+            token_gen,
+            language,
+            reference_wav=None,
+            voice_description=None,
+            emotion=None,
+            voice=None,
+            reference_text=None,
+        ):
             # consume all tokens
             async for _ in token_gen:
                 pass
@@ -222,6 +226,24 @@ class TestPipeline:
             pass
         history = pipeline.sessions.get_history("session-003")
         assert len(history) == 2
+
+    @pytest.mark.asyncio
+    async def test_process_audio_skip_slm(self, pipeline):
+        async def _should_not_run(*args, **kwargs):
+            raise AssertionError("SLM should be skipped when skip_slm=True")
+            yield
+
+        pipeline.slm.generate_stream = _should_not_run
+        chunks = []
+        audio = np.zeros(16000 * 3, dtype=np.float32)
+        async for chunk in pipeline.process_audio(
+            audio,
+            "session-004b",
+            "ta",
+            skip_slm=True,
+        ):
+            chunks.append(chunk)
+        assert len(chunks) > 0
 
     def test_reset_session(self, pipeline, session_store):
         session_store.append_turn("session-004", "hi", "hello")

@@ -262,7 +262,6 @@ class HFSLMEngine(BaseSLM):
         thread = threading.Thread(target=self._model.generate, kwargs=gen_kwargs)
         thread.start()
 
-        loop = asyncio.get_event_loop()
         for text in streamer:
             if text:
                 yield SLMToken(text=text)

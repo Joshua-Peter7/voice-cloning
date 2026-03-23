@@ -13,7 +13,7 @@ Sessions store the last N conversation turns as a list of
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from core.interfaces import BaseSessionStore
 from core.logger import get_logger

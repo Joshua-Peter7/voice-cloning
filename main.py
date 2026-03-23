@@ -19,7 +19,6 @@ import sys
 
 
 def serve(args):
-    import sys
     import uvicorn
     from config.settings import get_settings
     from core.logger import setup_logger
@@ -93,7 +92,62 @@ def tts_test(args):
         sf.write("output.wav", combined, samplerate=cfg.tts.sample_rate)
         print(f"\n✅ Saved to output.wav ({len(combined)/cfg.tts.sample_rate:.2f}s)")
 
-    asyncio.run(_run())
+    try:
+        asyncio.run(_run())
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        if "virtual memory" in msg or "pagefile" in msg:
+            print("\nERROR: model loading failed due low Windows virtual memory (pagefile).")
+            print("Increase pagefile size to at least 32GB and retry.")
+            print("Temporary fallback: set IVC_TTS__BACKEND=parler for non-clone speech.")
+            return
+        raise
+
+
+def clone_test(args):
+    """Quick clone test: synthesize text with a reference voice."""
+    import asyncio
+    import numpy as np
+    import soundfile as sf
+    from config.settings import get_settings
+    from tts.engine import create_tts_engine
+
+    cfg = get_settings()
+    engine = create_tts_engine(cfg.tts)
+
+    async def _run():
+        async def _token_gen():
+            yield args.text
+
+        chunks = []
+        sample_rate = cfg.tts.sample_rate
+        async for chunk in engine.stream_from_tokens(
+            _token_gen(),
+            language=args.lang,
+            reference_wav=args.reference,
+            emotion=args.emotion,
+        ):
+            chunks.append(chunk.audio)
+            sample_rate = chunk.sample_rate
+            print(f"  Chunk {chunk.chunk_index}: {chunk.latency_ms:.0f}ms")
+
+        if not chunks:
+            raise RuntimeError("No audio generated.")
+
+        combined = np.concatenate(chunks)
+        sf.write(args.output, combined, samplerate=sample_rate)
+        print(f"\nSaved cloned output to {args.output}")
+
+    try:
+        asyncio.run(_run())
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        if "virtual memory" in msg or "pagefile" in msg:
+            print("\nERROR: model loading failed due low Windows virtual memory (pagefile).")
+            print("Increase pagefile size to at least 32GB and retry.")
+            print("Temporary fallback: set IVC_TTS__BACKEND=parler for non-clone speech.")
+            return
+        raise
 
 
 def main():
@@ -117,6 +171,14 @@ def main():
     tts_p.add_argument("--text", required=True, help="Text to synthesize")
     tts_p.add_argument("--lang", default="ta", help="Language code (ta/te/kn/ml/hi/en)")
 
+    # clone
+    clone_p = subparsers.add_parser("clone", help="Quick voice clone smoke test")
+    clone_p.add_argument("--reference", required=True, help="Reference WAV path")
+    clone_p.add_argument("--text", required=True, help="Text to synthesize")
+    clone_p.add_argument("--lang", default="ta", help="Language code")
+    clone_p.add_argument("--emotion", default="neutral", help="Emotion tag (neutral/happy/sad/angry/clear)")
+    clone_p.add_argument("--output", default="cloned_output.wav", help="Output WAV path")
+
     args = parser.parse_args()
 
     if args.command == "serve" or args.command is None:
@@ -127,6 +189,8 @@ def main():
         quantize(args)
     elif args.command == "tts":
         tts_test(args)
+    elif args.command == "clone":
+        clone_test(args)
     else:
         parser.print_help()
         sys.exit(1)

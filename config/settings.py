@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ── Sub-models ────────────────────────────────────────────────────────────────
@@ -85,13 +85,32 @@ class XTTSConfig(BaseModel):
     split_sentences: bool = False
 
 
+class F5Config(BaseModel):
+    model_id: str = "F5-TTS"
+    device: str = "auto"
+    dtype: str = "float16"
+
+
+class SvaraConfig(BaseModel):
+    model_id: str = "kenpath/svara-tts-voiceclone-beta"
+    device: str = "auto"
+    min_reference_seconds: float = 3.0
+    max_reference_seconds: float = 15.0
+    reference_target_seconds: float = 10.0
+    max_new_tokens: int = 1200
+    temperature: float = 0.55
+    top_p: float = 0.90
+
+
 class TTSConfig(BaseModel):
-    backend: str = "parler"
+    backend: str = "auto"
     stream_chunk_words: int = 5
     sample_rate: int = 24000
     sentence_ends: List[str] = [".", "!", "?", "।", "؟"]
+    svara: SvaraConfig = Field(default_factory=SvaraConfig)
     parler: ParlerConfig = Field(default_factory=ParlerConfig)
     xtts: XTTSConfig = Field(default_factory=XTTSConfig)
+    f5: F5Config = Field(default_factory=F5Config)
 
 
 class AWQQuantConfig(BaseModel):

@@ -37,7 +37,7 @@ vad:
 
 # ── ASR (Automatic Speech Recognition) ──────────────────────────────────────
 asr:
-  model: "large-v3"          # large-v3 | distil-large-v3 | medium
+  model: "tiny"          # Changed to tiny for instant load
   compute_type: "float16"    # float16 (GPU) | int8 (CPU/faster)
   device: "auto"             # auto | cuda | cpu
   beam_size: 1               # 1 = greedy (fastest); higher = accurate
@@ -54,11 +54,21 @@ asr:
 
 # ── TTS (Text-to-Speech / Voice Cloning) ────────────────────────────────────
 tts:
-  backend: "parler"          # parler | xtts | auto (parler for Indic, xtts for clone)
+  backend: "f5"               # f5 works on this machine; parler/svara crash due to memory
   stream_chunk_words: 5      # Buffer this many words before synthesizing
   sample_rate: 24000
   # sentence-ending characters that trigger early flush
   sentence_ends: [".", "!", "?", "।", "؟", "።", "｡"]
+
+  svara:
+    model_id: "kenpath/svara-tts-voiceclone-beta"
+    device: "auto"
+    min_reference_seconds: 3.0
+    max_reference_seconds: 15.0
+    reference_target_seconds: 10.0
+    max_new_tokens: 1200
+    temperature: 0.55
+    top_p: 0.90
 
   parler:
     model_id: "ai4bharat/indic-parler-tts"
@@ -83,7 +93,7 @@ tts:
 
 # ── SLM (Small Language Model) ───────────────────────────────────────────────
 slm:
-  model_id: "microsoft/Phi-3.5-mini-instruct"
+  model_id: "Qwen/Qwen2.5-0.5B-Instruct"   # 1GB model for fast loads
   quantization: "awq"        # awq | gptq | bitsandbytes | none
   max_tokens: 256
   temperature: 0.7

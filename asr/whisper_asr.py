@@ -43,11 +43,6 @@ LANG_NAMES: Dict[str, str] = {
     "as": "Assamese",
 }
 
-# Language codes where whisper needs explicit specification for better accuracy
-# (auto-detect works but explicit is faster + more accurate for these)
-EXPLICIT_LANG_PREFERRED = {"ta", "te", "kn", "ml", "pa", "or", "as"}
-
-
 class FasterWhisperASR(BaseASR):
     """
     Faster-Whisper ASR using CTranslate2 backend.
@@ -177,7 +172,13 @@ class FasterWhisperASR(BaseASR):
     def transcribe_file(self, wav_path: str, language: str = "auto") -> ASRResult:
         """Convenience method to transcribe a wav file directly."""
         import soundfile as sf
-        audio, sr = sf.read(wav_path, dtype="float32")
+        try:
+            audio, sr = sf.read(wav_path, dtype="float32")
+        except Exception:
+            import librosa
+            audio, sr = librosa.load(wav_path, sr=None, mono=False)
+        if audio.ndim > 1 and audio.shape[0] < audio.shape[1]:
+            audio = audio.T
         if sr != 16000:
             import librosa
             audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)

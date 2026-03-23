@@ -14,8 +14,10 @@ Dependency Graph:
 
 from __future__ import annotations
 
+import os
 import time
-from typing import AsyncGenerator, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import AsyncGenerator, List, Optional
 
 import numpy as np
 
@@ -26,7 +28,6 @@ from core.interfaces import (
     BaseSessionStore,
     BaseVAD,
     LatencyProfile,
-    SLMToken,
     TTSChunk,
 )
 from core.logger import get_logger
@@ -70,11 +71,26 @@ class PipelineOrchestrator:
         self.reference_wav = reference_wav
         log.info("PipelineOrchestrator initialized")
 
+    def _resolve_reference_wav(self, candidate: Optional[str]) -> Optional[str]:
+        """Return a usable reference wav path or None."""
+        ref = candidate or self.reference_wav
+        if not ref:
+            return None
+        if not os.path.exists(ref):
+            log.warning("Reference wav missing, continuing without cloning reference", path=ref)
+            return None
+        return ref
+
     async def process_audio(
         self,
         audio_array: np.ndarray,
         session_id: str,
         language: str = "auto",
+        skip_slm: bool = False,
+        reference_wav: Optional[str] = None,
+        emotion: Optional[str] = None,
+        voice: Optional[str] = None,
+        reference_text: Optional[str] = None,
     ) -> AsyncGenerator[TTSChunk, None]:
         """
         Full pipeline from raw audio to TTS audio chunks.
@@ -83,6 +99,8 @@ class PipelineOrchestrator:
             audio_array: float32, 16kHz mono numpy array (complete utterance).
             session_id:  Unique session identifier.
             language:    Language hint; "auto" = detect from ASR.
+            skip_slm:    If True, speak ASR text directly without LLM rewrite.
+            reference_wav: Optional per-request reference voice override.
 
         Yields:
             TTSChunk objects (audio + metadata) as they're synthesized.
@@ -124,18 +142,27 @@ class PipelineOrchestrator:
 
         async def _token_gen():
             """Bridge: SLMToken stream → string token stream for TTS."""
-            async for tok in self.slm.generate_stream(
-                asr_result.text, history, asr_result.language
-            ):
-                full_response_parts.append(tok.text)
-                yield tok.text
+            if skip_slm:
+                full_response_parts.append(asr_result.text)
+                yield asr_result.text
+            else:
+                async for tok in self.slm.generate_stream(
+                    asr_result.text, history, asr_result.language
+                ):
+                    full_response_parts.append(tok.text)
+                    yield tok.text
 
         t_slm_start = time.perf_counter()
+
+        ref_wav = self._resolve_reference_wav(reference_wav)
 
         async for chunk in self.tts.stream_from_tokens(
             _token_gen(),
             language=asr_result.language,
-            reference_wav=self.reference_wav,
+            reference_wav=ref_wav,
+            emotion=emotion,
+            voice=voice,
+            reference_text=reference_text,
         ):
             if not first_chunk_sent:
                 profile.tts_first_chunk_ms = chunk.latency_ms
@@ -170,6 +197,11 @@ class PipelineOrchestrator:
         session_id: str,
         language: str = "ta",
         voice_description: Optional[str] = None,
+        skip_slm: bool = False,
+        reference_wav: Optional[str] = None,
+        emotion: Optional[str] = None,
+        voice: Optional[str] = None,
+        reference_text: Optional[str] = None,
     ) -> AsyncGenerator[TTSChunk, None]:
         """
         Text-in → TTS streaming (skips VAD + ASR).
@@ -182,15 +214,26 @@ class PipelineOrchestrator:
         first_chunk_sent = False
 
         async def _token_gen():
-            async for tok in self.slm.generate_stream(user_text, history, language):
-                full_response_parts.append(tok.text)
-                yield tok.text
+            if skip_slm:
+                # Bypass SLM: yield the full text AT ONCE so utterance-level
+                # models (F5, Svara) get the complete text, not word fragments.
+                full_response_parts.append(user_text)
+                yield user_text
+            else:
+                async for tok in self.slm.generate_stream(user_text, history, language):
+                    full_response_parts.append(tok.text)
+                    yield tok.text
+
+        ref_wav = self._resolve_reference_wav(reference_wav)
 
         async for chunk in self.tts.stream_from_tokens(
             _token_gen(),
             language=language,
-            reference_wav=self.reference_wav,
+            reference_wav=ref_wav,
             voice_description=voice_description,
+            emotion=emotion,
+            voice=voice,
+            reference_text=reference_text,
         ):
             if not first_chunk_sent:
                 profile.total_ttfb_ms = round(
@@ -214,7 +257,6 @@ class PipelineOrchestrator:
         Hot-swap the reference voice for XTTS cloning.
         No restart required.
         """
-        import os
         if not os.path.exists(wav_path):
             raise FileNotFoundError(f"Reference wav not found: {wav_path}")
         self.reference_wav = wav_path
@@ -248,5 +290,12 @@ def build_pipeline(
         tts=create_tts_engine(settings.tts),
         sessions=create_session_store(settings.session),
         monitor=create_monitor(settings.monitoring),
-        reference_wav=reference_wav or settings.infra.audio_samples_dir + "/reference_voice.wav",
+        reference_wav=(
+            reference_wav
+            or (
+                str(Path(settings.infra.audio_samples_dir) / "reference_voice.wav")
+                if (Path(settings.infra.audio_samples_dir) / "reference_voice.wav").exists()
+                else None
+            )
+        ),
     )

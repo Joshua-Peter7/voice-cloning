@@ -15,14 +15,12 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional
 
 from prometheus_client import (
     CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
-    Summary,
     generate_latest,
     start_http_server,
     CONTENT_TYPE_LATEST,

@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Real-Time Cloned Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8b5cf6;
+            --primary-hover: #7c3aed;
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --border-color: rgba(148, 163, 184, 0.1);
+            --text-main: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #10b981;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #172554 100%);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .navbar {
+            padding: 1rem 2rem;
+            width: 100%;
+            display: flex;
+            gap: 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            border-bottom: 1px solid var(--border-color);
+            box-sizing: border-box;
+        }
+
+        .navbar a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .navbar a:hover, .navbar a.active {
+            color: var(--primary);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            padding: 3rem 1rem;
+            flex: 1;
+        }
+
+        .studio-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #34d399, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .mic-btn {
+            background: var(--primary);
+            border: none;
+            border-radius: 50%;
+            width: 100px;
+            height: 100px;
+            margin: 2rem auto;
+            cursor: pointer;
+            box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .mic-btn.recording {
+            background: #ef4444;
+            animation: pulse-red 1.5s infinite;
+        }
+
+        .mic-btn svg {
+            width: 40px;
+            height: 40px;
+            fill: white;
+        }
+
+        .status-text {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            min-height: 1.5em;
+        }
+
+        .transcript-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: left;
+            margin-top: 2rem;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #e2e8f0;
+        }
+
+        .ai-text {
+            color: #38bdf8;
+            font-weight: 600;
+        }
+
+        .user-text {
+            color: #a78bfa;
+            font-weight: 600;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.8rem;
+            margin: 1.5rem 0 0.8rem;
+            text-align: left;
+        }
+
+        .control {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .control.full {
+            grid-column: 1 / -1;
+        }
+
+        .control label {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .control select,
+        .control input[type="file"] {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-radius: 10px;
+            padding: 0.55rem 0.7rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        .helper-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .apply-btn {
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            background: rgba(16, 185, 129, 0.12);
+            color: #6ee7b7;
+            border-radius: 10px;
+            padding: 0.45rem 0.85rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: inherit;
+        }
+
+        .apply-btn:hover {
+            background: rgba(16, 185, 129, 0.2);
+        }
+
+        .voice-status {
+            color: var(--text-secondary);
+            font-size: 0.84rem;
+        }
+
+        @media (max-width: 700px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            .control.full {
+                grid-column: auto;
+            }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="navbar">
+    <a href="/ui/">Text API Cloner</a>
+    <a href="/ui/realtime.html" class="active">Real-Time Voice Cloner</a>
+</div>
+
+<div class="container">
+    <div class="studio-card">
+        <div class="header">
+            <h1>Real-Time Cloned Assistant</h1>
+            <p style="color: var(--text-secondary); margin-top: 0.5rem;">Speak with your AI using streaming voice cloning</p>
+        </div>
+
+        <div class="controls">
+            <div class="control">
+                <label for="languageSelect">Language</label>
+                <select id="languageSelect">
+                    <option value="ta" selected>Tamil</option>
+                    <option value="te">Telugu</option>
+                    <option value="kn">Kannada</option>
+                    <option value="ml">Malayalam</option>
+                    <option value="hi">Hindi</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="responseMode">Response Mode</label>
+                <select id="responseMode">
+                    <option value="direct">Direct (no rewrite)</option>
+                    <option value="assistant">Assistant reply</option>
+                </select>
+            </div>
+            <div class="control full">
+                <label for="refVoiceInput">Reference Voice (WAV recommended)</label>
+                <input type="file" id="refVoiceInput" accept="audio/wav,audio/*">
+            </div>
+        </div>
+        <div class="helper-row">
+            <button class="apply-btn" id="applyVoiceBtn" onclick="applyReferenceVoice()">Update Reference Voice</button>
+            <div class="voice-status" id="voiceStatus">No reference voice loaded</div>
+        </div>
+
+        <button class="mic-btn" id="streamBtn" onclick="toggleStreaming()">
+            <svg id="micIcon" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+        </button>
+
+        <div class="status-text" id="statusMessage">Click the microphone to connect to the server</div>
+
+        <div class="transcript-box" id="transcript">
+            <div style="color: var(--text-secondary); font-style: italic;">Conversation will appear here...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let isStreaming = false;
+    let socket = null;
+    let audioContext = null;
+    let mediaStream = null;
+    let processor = null;
+    let referenceAudioB64 = null;
+    let referenceAudioName = null;
+    let referenceAudioType = null;
+
+    // We need to play back the chunks the server sends
+    let audioQueue = [];
+    let isPlaying = false;
+    let playbackContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    const streamBtn = document.getElementById('streamBtn');
+    const statusMessage = document.getElementById('statusMessage');
+    const transcript = document.getElementById('transcript');
+    const languageSelect = document.getElementById('languageSelect');
+    const responseMode = document.getElementById('responseMode');
+    const refVoiceInput = document.getElementById('refVoiceInput');
+    const voiceStatus = document.getElementById('voiceStatus');
+
+    function updateTranscript(speaker, text) {
+        if (!text) return;
+        const p = document.createElement('div');
+        p.style.marginBottom = '10px';
+        p.innerHTML = `<span class="${speaker === 'AI' ? 'ai-text' : 'user-text'}">${speaker}:</span> ${text}`;
+        
+        let initialText = transcript.innerHTML;
+        if(initialText.includes("Conversation will appear here")) {
+            transcript.innerHTML = "";
+        }
+        transcript.appendChild(p);
+        transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    refVoiceInput.addEventListener('change', async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+            referenceAudioB64 = null;
+            referenceAudioName = null;
+            referenceAudioType = null;
+            voiceStatus.textContent = "No reference voice loaded";
+            return;
+        }
+
+        referenceAudioName = file.name || null;
+        referenceAudioType = file.type || null;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || "");
+            referenceAudioB64 = result.includes(",") ? result.split(",")[1] : result;
+            voiceStatus.textContent = `Reference ready: ${file.name}`;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    async function pushReferenceToServer() {
+        if (!socket || socket.readyState !== WebSocket.OPEN || !referenceAudioB64) return false;
+        socket.send(JSON.stringify({
+            type: "update_voice_b64",
+            reference_wav_b64: referenceAudioB64,
+            reference_filename: referenceAudioName,
+            reference_content_type: referenceAudioType,
+            language: languageSelect.value
+        }));
+        return true;
+    }
+
+    async function applyReferenceVoice() {
+        if (!referenceAudioB64) {
+            voiceStatus.textContent = "Choose a reference audio file first";
+            return;
+        }
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            voiceStatus.textContent = "Reference ready. Start mic to upload.";
+            return;
+        }
+
+        const sent = await pushReferenceToServer();
+        if (sent) {
+            voiceStatus.textContent = "Uploading reference voice...";
+        }
+    }
+
+    async function toggleStreaming() {
+        if (isStreaming) {
+            stopStreaming();
+            return;
+        }
+        
+        try {
+            statusMessage.textContent = "Connecting to WebSocket...";
+            
+            // Connect WebSocket
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws/voice`);
+            
+            socket.onopen = async () => {
+                if (referenceAudioB64) {
+                    await pushReferenceToServer();
+                    voiceStatus.textContent = "Reference voice synced";
+                }
+                statusMessage.textContent = "Connected. Starting microphone...";
+                await startMicrophone();
+            };
+
+            socket.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.type === "status") {
+                    if (msg.msg === "asr_start") {
+                        statusMessage.textContent = "Processing your speech...";
+                    } else if (msg.msg === "voice_updated") {
+                        voiceStatus.textContent = "Reference voice active";
+                    } else {
+                        statusMessage.textContent = msg.msg;
+                    }
+                } else if (msg.type === "ttfb") {
+                    console.log(`Time to first audio byte: ${msg.ms}ms`);
+                } else if (msg.type === "turn_complete") {
+                    statusMessage.textContent = "Listening...";
+                } else if (msg.type === "audio_chunk") {
+                    if(msg.text_segment) {
+                        updateTranscript('AI', msg.text_segment);
+                    }
+                    if(msg.audio) {
+                        queueAudioData(msg.audio);
+                    }
+                } else if (msg.type === "error") {
+                    statusMessage.textContent = msg.msg || "Server error";
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error("WebSocket Error:", error);
+                statusMessage.textContent = "Connection error occurred.";
+                stopStreaming();
+            };
+
+            socket.onclose = () => {
+                statusMessage.textContent = "Disconnected.";
+                stopStreaming();
+            };
+
+        } catch (e) {
+            console.error("Setup error:", e);
+            statusMessage.textContent = "Error setting up audio: " + e.message;
+            stopStreaming();
+        }
+    }
+
+    async function startMicrophone() {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 16000 // Silero / Whisper prefer 16kHz
+        });
+        
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        
+        // Use ScriptProcessor for max compatibility downsampling to float32
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        
+        source.connect(processor);
+        const silence = audioContext.createGain();
+        silence.gain.value = 0.0;
+        processor.connect(silence);
+        silence.connect(audioContext.destination);
+        
+        processor.onaudioprocess = (e) => {
+            if (!isStreaming || socket.readyState !== WebSocket.OPEN) return;
+            
+            const inputData = e.inputBuffer.getChannelData(0);
+            
+            // Convert Float32Array to raw bytes
+            const bytes = new Uint8Array(inputData.buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const b64 = window.btoa(binary);
+            const skipSlm = responseMode.value === "direct";
+
+            socket.send(JSON.stringify({
+                type: "audio_chunk",
+                audio: b64,
+                language: languageSelect.value,
+                skip_slm: skipSlm
+            }));
+        };
+
+        isStreaming = true;
+        streamBtn.classList.add('recording');
+        statusMessage.textContent = "Listening... Speak now!";
+    }
+
+    function stopStreaming() {
+        isStreaming = false;
+        streamBtn.classList.remove('recording');
+        
+        if (processor) {
+            processor.disconnect();
+            processor = null;
+        }
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+        }
+        if (audioContext) {
+            audioContext.close();
+            audioContext = null;
+        }
+        if (socket) {
+            socket.close();
+            socket = null;
+        }
+        
+        if(statusMessage.textContent.includes('Listening') || statusMessage.textContent.includes('Connecting')) {
+            statusMessage.textContent = "Click the microphone to connect";
+        }
+    }
+
+    async function queueAudioData(base64Audio) {
+        // Server sends WAV chunks as base64.
+        
+        const res = await fetch('data:audio/wav;base64,' + base64Audio);
+        const arrayBuffer = await res.arrayBuffer();
+        
+        playbackContext.decodeAudioData(arrayBuffer, (buffer) => {
+            audioQueue.push(buffer);
+            if (!isPlaying) {
+                playNextInQueue();
+            }
+        });
+    }
+
+    function playNextInQueue() {
+        if (audioQueue.length === 0) {
+            isPlaying = false;
+            return;
+        }
+        
+        isPlaying = true;
+        const buffer = audioQueue.shift();
+        const source = playbackContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(playbackContext.destination);
+        source.onended = () => {
+            playNextInQueue();
+        };
+        source.start(0);
+    }
+</script>
+
+</body>
+</html>
